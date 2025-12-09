@@ -1,0 +1,24 @@
+# Ignore Python virtual env
+.venv/
+venv/
+
+# Ignore dbt compiled assets
+dbt/target/
+dbt/.user.yml
+
+# Ignore Airflow stuff
+airflow_home/
+logs/
+*.log
+
+# Ignore DuckDB warehouse
+warehouse/
+*.duckdb
+
+# Ignore generated data
+data/clean/
+data/quality/
+
+# Ignore Python cache
+__pycache__/
+*.pyc

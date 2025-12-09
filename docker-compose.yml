@@ -1,0 +1,19 @@
+services:
+  airflow:
+    build: .
+    container_name: airflow-medallion
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
+      - DBT_PROFILES_DIR=/opt/airflow/profiles
+      - DUCKDB_PATH=/opt/airflow/warehouse/medallion.duckdb
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+      - ./dbt:/opt/airflow/dbt
+      - ./profiles:/opt/airflow/profiles
+      - ./warehouse:/opt/airflow/warehouse
+      - ./include:/opt/airflow/include  
+    ports:
+      - "8080:8080"
+    command: standalone
