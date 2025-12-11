@@ -283,5 +283,3 @@ La solución cumple con todo lo requerido:
 - Documentación completa.  
 - Validación con múltiples días simulados.  
 - Propuesta de mejoras orientadas a escalabilidad.
-
-El pipeline final es reproducible, extensible y alineado con buenas prácticas de ingeniería de datos.
