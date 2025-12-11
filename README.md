@@ -179,6 +179,68 @@ Se podría integrar al DAG.
 - Logging centralizado.  
 - Metadatos de ejecución.
 
+### 3.5 Manejo del caso sin archivos para el día indicado (Nice to Have)
+
+El requerimiento adicional consistía en manejar correctamente la situación donde no existe un archivo en `data/raw/` para un día determinado.  
+Para resolverlo se implementó una lógica de control en la tarea Bronze que:
+
+1. Intenta localizar y procesar el archivo crudo correspondiente a `ds_nodash`.
+2. Si el archivo no existe, captura la excepción `FileNotFoundError`.
+3. Registra el evento mediante logging.
+4. Lanza explícitamente una excepción `AirflowSkipException`, lo que permite a Airflow:
+   - marcar la tarea como *skipped*,
+   - continuar el DAG sin errores,
+   - mantener la integridad del scheduling.
+
+La lógica se encuentra implementada en:
+
+```
+include/transformations.py  
+dags/medallion_medallion_dag.py  
+```
+
+Este mecanismo garantiza un pipeline estable y evita fallos innecesarios cuando no existe input para un día dado, permitiendo además evaluar correctamente la funcionalidad del DAG durante el catchup.
+
+### 3.6 Diagrama del Pipeline Medallion
+
+El siguiente diagrama representa el flujo completo de procesamiento entre las capas Bronze, Silver y Gold, junto con la interacción entre Airflow, dbt y DuckDB.
+
+
+```mermaid
+flowchart TD
+
+    %% Estilos
+    classDef bronze fill:#f2c66d,stroke:#c59f42,stroke-width:1,color:#000;
+    classDef silver fill:#9fc5e8,stroke:#6e9fc7,stroke-width:1,color:#000;
+    classDef gold fill:#b6d7a8,stroke:#7aa275,stroke-width:1,color:#000;
+    classDef airflow fill:#e6e6e6,stroke:#bfbfbf,color:#000;
+
+    %% Nodos del pipeline
+    A[Airflow DAG<br/>medallion_pipeline]:::airflow
+
+    B[Bronze Layer<br/>_bronze_clean_task<br/>Limpieza con pandas<br/>→ Parquet limpio]:::bronze
+    C[Silver Layer<br/>_silver_dbt_run_task<br/>dbt run sobre DuckDB<br/>→ modelos staging]:::silver
+    D[Gold Layer<br/>_gold_dbt_tests_task<br/>dbt test<br/>→ JSON de calidad]:::gold
+
+    %% Flujo
+    A --> B --> C --> D
+
+    %% Archivos
+    R[(data/raw/*.csv)]:::bronze
+    P[(data/clean/*.parquet)]:::silver
+    W[(warehouse/medallion.duckdb)]:::silver
+    Q[(data/quality/*.json)]:::gold
+
+    %% Conexiones a archivos
+    R --> B
+    B --> P
+    P --> C
+    C --> W
+    D --> Q
+```
+
+
+
 # 4. Validación con múltiples días de datos
 -----------------------------------------
 
