@@ -18,5 +18,3 @@ select
     cast(transaction_ts   as timestamp) as transaction_ts,
     cast(transaction_date as date)      as transaction_date
 from source
-
--- TODO: Completar el modelo para que cree la tabla staging con los tipos adecuados segun el schema.yml.
