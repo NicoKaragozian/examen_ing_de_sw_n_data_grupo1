@@ -1,209 +1,225 @@
-# Medallion Architecture Demo (Airflow + dbt + DuckDB)
+Medallion Pipeline – Examen Ingeniería de Software y Datos
+===========================================================
 
-Este proyecto crea un pipeline de 3 pasos que replica la arquitectura medallion:
+Este repositorio implementa un pipeline basado en la arquitectura Medallion (Bronze → Silver → Gold), utilizando Apache Airflow para la orquestación, dbt con DuckDB para el modelado de datos y pandas para la limpieza en la capa Bronze.
 
-1. **Bronze**: Airflow lee un CSV crudo según la fecha de ejecución y aplica una limpieza básica con Pandas guardando un archivo parquet limpio.
-2. **Silver**: Un `dbt run` carga el parquet en DuckDB y genera modelos intermedios.
-3. **Gold**: `dbt test` valida la tabla final y escribe un archivo con el resultado de los data quality checks.
+El objetivo del examen consiste en completar y poner en funcionamiento todo el workflow, resolviendo los TODOs provistos y documentando las decisiones de implementación.
 
-## Estructura
+# 1. Ejecución del repositorio
+----------------------------
+
+### 1.1 Requisitos previos
+
+El proyecto está diseñado para ejecutarse utilizando Docker a fin de garantizar un entorno reproducible, independiente del sistema operativo.
+
+Requisitos:
+
+- Docker Desktop  
+- Docker Compose v2  
+- En Windows, se recomienda la utilización de WSL2, aunque no es estrictamente necesario mientras Docker pueda montar volúmenes correctamente.
+
+### 1.2 Clonado del repositorio
+
+```
+git clone https://github.com/plorenzatto/examen_ing_de_sw_n_data_final.git
+cd examen_ing_de_sw_n_data_final
+```
+
+### 1.3 Levantar el entorno
+
+Ejecutar:
+
+```
+docker compose up
+```
+
+Esto inicia:
+
+- Airflow Webserver  
+- Airflow Scheduler  
+- Airflow Triggerer  
+- Airflow Dag Processor  
+- Base de datos interna  
+- Entorno de dbt con DuckDB  
+
+La interfaz web de Airflow se encuentra en:  
+http://localhost:8080
+
+### 1.4 Usuario y contraseña
+
+Airflow genera una contraseña almacenada en:
+
+```
+/opt/airflow/simple_auth_manager_passwords.json.generated
+```
+
+Para obtenerla:
+
+```
+docker exec -it airflow-medallion cat /opt/airflow/simple_auth_manager_passwords.json.generated
+```
+
+# 2. Estructura del repositorio
+-----------------------------
 
 ```
 ├── dags/
 │   └── medallion_medallion_dag.py
-├── data/
-│   ├── raw/
-│   │   └── transactions_20251205.csv
-│   ├── clean/
-│   └── quality/
-├── dbt/
-│   ├── dbt_project.yml
-│   ├── models/
-│   │   ├── staging/
-│   │   └── marts/
-│   └── tests/
 ├── include/
 │   └── transformations.py
-├── profiles/
-│   └── profiles.yml
+├── dbt/
+│   ├── models/
+│   │   ├── staging/stg_transactions.sql
+│   │   ├── marts/fct_customer_transactions.sql
+│   │   └── schema.yml
+│   └── profiles/
+├── data/
+│   ├── raw/
+│   ├── clean/
+│   └── quality/
 ├── warehouse/
-│   └── medallion.duckdb (se genera en tiempo de ejecución)
-└── requirements.txt
+│   └── medallion.duckdb
+└── docker-compose.yml
 ```
 
-## Requisitos
+# 3. Resolución de los TODOs del examen
+-------------------------------------
 
-- Python 3.10+
-- DuckDB CLI opcional para inspeccionar la base.
+### 3.1 Implementación de tareas de Airflow
 
-Instala dependencias:
+El DAG `medallion_pipeline` implementa tres tareas:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+- `bronze_clean`: limpieza de datos con pandas y generación de archivos parquet.  
+- `silver_dbt_run`: ejecución de modelos dbt sobre DuckDB.  
+- `gold_dbt_tests`: ejecución de pruebas dbt y generación de reportes de calidad.
+
+El DAG cuenta con:
+
+```
+schedule = "0 6 * * *"
+start_date = pendulum.datetime(2025, 12, 1, tz="UTC")
+catchup = True
+max_active_runs = 1
 ```
 
-## Configuración de variables de entorno
+Esto habilita la ejecución automática diaria y la recomputación de fechas anteriores.
 
-```bash
-export AIRFLOW_HOME=$(pwd)/airflow_home
-export DBT_PROFILES_DIR=$(pwd)/profiles
-export DUCKDB_PATH=$(pwd)/warehouse/medallion.duckdb
-export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/dags
-export AIRFLOW__CORE__LOAD_EXAMPLES=False
+### 3.2 Implementación de los modelos dbt según schema.yml
+
+Se completaron:
+
+- `stg_transactions.sql` (Silver / staging)  
+- `fct_customer_transactions.sql` (Gold / marts)
+
+Los modelos cumplen con las definiciones y tipos especificados.
+
+### 3.3 Implementación de pruebas dbt
+
+Las pruebas incluidas en `schema.yml` validan:
+
+- unicidad  
+- no-nulidad  
+- valores aceptados  
+- no-negatividad  
+
+La tarea Gold genera:
+
+```
+data/quality/dq_results_<ds_nodash>.json
 ```
 
-## Inicializar Airflow
+Si alguna prueba falla, el task termina en error.
 
-```bash
-airflow standalone
+### 3.4 Mejoras posibles (escalabilidad y modelado)
+
+#### 3.4.1 Separación de ambientes y modularización
+
+- Separar Airflow y dbt en contenedores independientes.  
+- Ejecutar dbt de forma remota (dbt Cloud, runner dedicado).  
+- Desacoplar el data warehouse.
+
+#### 3.4.2 Migración a data warehouse escalable
+
+Opciones:
+
+- Amazon Redshift  
+- BigQuery  
+- Snowflake  
+
+Permiten particionamiento, clustering y escalado automático.
+
+#### 3.4.3 Particionamiento en Silver y Gold
+
+- Particionar por `transaction_date`.  
+- Implementar modelos incrementalizados.
+
+#### 3.4.4 Sensores en Bronze
+
+- `FileSensor` para esperar la llegada del CSV.  
+- SLA para alertar retrasos.
+
+#### 3.4.5 Validaciones adicionales
+
+- Consistencia temporal.  
+- Correlaciones entre campos.  
+- Chequeos estadísticos y duplicados avanzados.
+
+#### 3.4.6 Documentación automática
+
+```
+dbt docs generate
+dbt docs serve
 ```
 
-En el output de `airflow standalone` buscar la contraseña para loguearse. Ej:
-```
-standalone | Airflow is ready
-standalone | Login with username: admin  password: pPr9XXxFzgrgGd6U
-```
+Se podría integrar al DAG.
 
+#### 3.4.7 Monitoreo y trazabilidad
 
-## Ejecutar el DAG
+- Métricas con Prometheus/Grafana.  
+- Logging centralizado.  
+- Metadatos de ejecución.
 
-1. Coloca/actualiza el archivo `data/raw/transactions_YYYYMMDD.csv`.
+# 4. Validación con múltiples días de datos
+-----------------------------------------
 
+Se agregaron archivos en `data/raw/` para simular varios días:
 
-3. Desde la UI o CLI dispara el DAG usando la fecha deseada:
+- `transactions_20251201.csv`  
+- `transactions_20251203.csv`  
+- `transactions_20251205.csv`  
+- `transactions_20251209.csv`
 
-```bash
-airflow dags trigger medallion_pipeline --run-id manual_$(date +%s)
-```
+Esto permite validar:
 
-El DAG ejecutará:
+- Ejecución histórica mediante catchup.  
+- Procesamiento correcto según disponibilidad.  
+- Saltos automáticos.  
+- Generación de múltiples reportes de calidad.
 
-- `bronze_clean`: llama a `clean_daily_transactions` para crear `data/clean/transactions_<ds>_clean.parquet`.
-- `silver_dbt_run`: ejecuta `dbt run` apuntando al proyecto `dbt/` y carga la data en DuckDB.
-- `gold_dbt_tests`: corre `dbt test` y escribe `data/quality/dq_results_<ds>.json` con el status (`passed`/`failed`).
+# 5. Comportamiento del scheduling
+-------------------------------
 
-Si un test falla, el archivo igual se genera y el task termina en error para facilitar el monitoreo.
+El DAG corre diariamente a las **06:00 UTC**.
 
-## Ejecutar dbt manualmente
+Se corrigió el problema que omitía el día 1 ajustando:
 
-```bash
-cd dbt
-dbt run
-DBT_PROFILES_DIR=../profiles dbt test
-```
+- start_date  
+- zona horaria  
+- ejecución del contenedor  
 
-Asegúrate de exportar `CLEAN_DIR`, `DS_NODASH` y `DUCKDB_PATH` si necesitas sobreescribir valores por defecto:
+Ahora Airflow genera todas las corridas esperadas.
 
-```bash
-export CLEAN_DIR=$(pwd)/../data/clean
-export DS_NODASH=20251205
-export DUCKDB_PATH=$(pwd)/../warehouse/medallion.duckdb
-```
+# 6. Conclusiones
+---------------
 
-## Observabilidad de Data Quality
+La solución cumple con todo lo requerido:
 
-Cada corrida crea `data/quality/dq_results_<ds>.json` similar a:
+- Implementación completa del DAG.  
+- Modelos dbt correctos.  
+- Pruebas de calidad ejecutadas en Gold.  
+- Manejo robusto de ausencia de archivos.  
+- Documentación completa.  
+- Validación con múltiples días simulados.  
+- Propuesta de mejoras orientadas a escalabilidad.
 
-```json
-{
-  "ds_nodash": "20251205",
-  "status": "passed",
-  "stdout": "...",
-  "stderr": ""
-}
-```
-
-Ese archivo puede ser ingerido por otras herramientas para auditoría o alertas.
-
-
-## Verificación de resultados por capa
-
-### Bronze
-1. Revisa que exista el parquet más reciente:
-    ```bash
-    $ find data/clean/ | grep transactions_*
-    data/clean/transactions_20251201_clean.parquet
-    ```
-2. Inspecciona las primeras filas para confirmar la limpieza aplicada:
-    ```bash
-    duckdb -c "
-      SELECT *
-      FROM read_parquet('data/clean/transactions_20251201_clean.parquet')
-      LIMIT 5;
-    "
-    ```
-
-### Silver
-1. Abre el warehouse y lista las tablas creadas por dbt:
-    ```bash
-    duckdb warehouse/medallion.duckdb -c ".tables"
-    ```
-2. Ejecuta consultas puntuales para validar cálculos intermedios:
-    ```bash
-    duckdb warehouse/medallion.duckdb -c "
-      SELECT *
-      FROM fct_customer_transactions
-      LIMIT 10;
-    "
-    ```
-
-### Gold
-1. Revisa que exista el parquet más reciente:
-    ```bash
-    $ find data/quality/*.json
-    data/quality/dq_results_20251201.json
-    ```
-
-2. Confirma la generación del archivo de data quality:
-    ```bash
-    cat data/quality/dq_results_20251201.json | jq
-    ```
-
-3. En caso de fallos, inspecciona `stderr` dentro del mismo JSON o revisa los logs del task en la UI/CLI de Airflow para identificar la prueba que reportó error.
-
-
-## Formato y linting
-
-Usa las herramientas incluidas en `requirements.txt` para mantener un estilo consistente y detectar problemas antes de ejecutar el DAG.
-
-### Black (formateo)
-
-Aplica Black sobre los módulos de Python del proyecto. Añade rutas extra si incorporas nuevos paquetes.
-
-```bash
-black dags include
-```
-
-### isort (orden de imports)
-
-Ordena automáticamente los imports para evitar diffs innecesarios y mantener un estilo coherente.
-
-```bash
-isort dags include
-```
-
-### Pylint (estático)
-
-Ejecuta Pylint sobre las mismas carpetas para detectar errores comunes y mejorar la calidad del código.
-
-```bash
-pylint dags/*.py include/*.py
-```
-
-Para ejecutar ambos comandos de una vez puedes usar:
-
-```bash
-isort dags include && black dags include && pylint dags/*.py include/*.py
-```
-
-## TODOs
-Necesarios para completar el workflow:
-- [ ] Implementar tareas de Airflow.
-- [ ] Implementar modelos de dbt según cada archivo schema.yml.
-- [ ] Implementar pruebas de dbt para asegurar que las tablas gold estén correctas.
-- [ ] Documentar mejoras posibles para el proceso considerado aspectos de escalabilidad y modelado de datos.
-Nice to hace:
-- [ ] Manejar el caso que no haya archivos para el dia indicado.
+El pipeline final es reproducible, extensible y alineado con buenas prácticas de ingeniería de datos.

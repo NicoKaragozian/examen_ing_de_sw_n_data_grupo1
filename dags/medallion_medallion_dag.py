@@ -143,7 +143,7 @@ def build_dag() -> DAG:
         description="Bronze/Silver/Gold medallion demo with pandas, dbt, and DuckDB",
         dag_id="medallion_pipeline",
         schedule="0 6 * * *",
-        start_date=pendulum.datetime(2025, 12, 1, tz="UTC"),
+        start_date=pendulum.datetime(2025, 11, 30, tz="UTC"),
         catchup=True,
         max_active_runs=1,
     ) as medallion_dag:
