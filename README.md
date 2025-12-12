@@ -270,8 +270,3 @@ Se corrigió el problema que omitía el día 1 ajustando:
 - ejecución del contenedor  
 
 Ahora Airflow genera todas las corridas esperadas.
-
-# 6. Conclusiones
----------------
-
-Se desarrolló un DAG funcional en Airflow, se integraron modelos dbt sobre DuckDB y se incorporaron pruebas de calidad de datos en la capa Gold, incluyendo el manejo del caso sin archivos para un día determinado. Esto además sienta una base para futuras mejoras en términos de escalabilidad y robustez.
