@@ -274,12 +274,4 @@ Ahora Airflow genera todas las corridas esperadas.
 # 6. Conclusiones
 ---------------
 
-La solución cumple con todo lo requerido:
-
-- Implementación completa del DAG.  
-- Modelos dbt correctos.  
-- Pruebas de calidad ejecutadas en Gold.  
-- Manejo robusto de ausencia de archivos.  
-- Documentación completa.  
-- Validación con múltiples días simulados.  
-- Propuesta de mejoras orientadas a escalabilidad.
+Se desarrolló un DAG funcional en Airflow, se integraron modelos dbt sobre DuckDB y se incorporaron pruebas de calidad de datos en la capa Gold, incluyendo el manejo del caso sin archivos para un día determinado. Esto además sienta una base para futuras mejoras en términos de escalabilidad y robustez.
