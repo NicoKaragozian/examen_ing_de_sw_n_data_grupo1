@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from include.transformations import (  # pylint: disable=wrong-import-position
+from src.transformations import (
     clean_daily_transactions,
 )
 

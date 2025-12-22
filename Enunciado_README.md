@@ -22,7 +22,7 @@ Este proyecto crea un pipeline de 3 pasos que replica la arquitectura medallion:
 │   │   ├── staging/
 │   │   └── marts/
 │   └── tests/
-├── include/
+├── src/
 │   └── transformations.py
 ├── profiles/
 │   └── profiles.yml
@@ -174,7 +174,7 @@ Usa las herramientas incluidas en `requirements.txt` para mantener un estilo con
 Aplica Black sobre los módulos de Python del proyecto. Añade rutas extra si incorporas nuevos paquetes.
 
 ```bash
-black dags include
+black dags src
 ```
 
 ### isort (orden de imports)
@@ -182,7 +182,7 @@ black dags include
 Ordena automáticamente los imports para evitar diffs innecesarios y mantener un estilo coherente.
 
 ```bash
-isort dags include
+isort dags src
 ```
 
 ### Pylint (estático)
@@ -190,13 +190,13 @@ isort dags include
 Ejecuta Pylint sobre las mismas carpetas para detectar errores comunes y mejorar la calidad del código.
 
 ```bash
-pylint dags/*.py include/*.py
+pylint dags/*.py src/*.py
 ```
 
-Para ejecutar ambos comandos de una vez puedes usar:
+Para ejecutar ambos comandos de una vez se puede usar:
 
 ```bash
-isort dags include && black dags include && pylint dags/*.py include/*.py
+isort dags src && black dags src && pylint dags/*.py src/*.py
 ```
 
 ## TODOs

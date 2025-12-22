@@ -7,3 +7,5 @@ black==25.11.0
 pylint==4.0.4
 isort==7.0.0
 jq==1.10.0
+pytest==8.3.5
+pytest-cov==6.1.1

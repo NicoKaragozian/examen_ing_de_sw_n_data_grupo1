@@ -65,13 +65,25 @@ docker exec -it airflow-medallion cat /opt/airflow/simple_auth_manager_passwords
 ```
 ├── dags/
 │   └── medallion_medallion_dag.py
-├── include/
+├── src/
 │   └── transformations.py
+├── tests/                              # Tests unitarios de Python
+│   ├── __init__.py
+│   ├── conftest.py
+│   └── test_transformations.py
 ├── dbt/
 │   ├── models/
 │   │   ├── staging/stg_transactions.sql
 │   │   ├── marts/fct_customer_transactions.sql
 │   │   └── schema.yml
+│   ├── tests/
+│   │   ├── generic/non_negative.sql
+│   │   └── singular/                   # Tests singulares de dbt
+│   │       ├── assert_total_amount_all_gte_completed.sql
+│   │       ├── assert_transaction_count_positive.sql
+│   │       ├── assert_staging_amounts_match_mart_totals.sql
+│   │       ├── assert_transaction_date_not_future.sql
+│   │       └── assert_customer_count_consistency.sql
 │   └── profiles/
 ├── data/
 │   ├── raw/
@@ -79,6 +91,7 @@ docker exec -it airflow-medallion cat /opt/airflow/simple_auth_manager_passwords
 │   └── quality/
 ├── warehouse/
 │   └── medallion.duckdb
+├── pytest.ini                          # Configuración de pytest
 └── docker-compose.yml
 ```
 
@@ -130,15 +143,96 @@ data/quality/dq_results_<ds_nodash>.json
 
 Si alguna prueba falla, el task termina en error.
 
-### 3.4 Mejoras posibles (escalabilidad y modelado)
+### 3.4 Tests a medida (Custom Tests)
 
-#### 3.4.1 Separación de ambientes y modularización
+Se implementaron tests en dos niveles: unit tests de Python para la capa Bronze y tests singulares de dbt para validar la integridad entre capas.
+
+#### 3.4.1 Unit Tests de Python (pytest)
+
+Los tests unitarios validan el comportamiento de las funciones de transformación en `src/transformations.py`:
+
+**Ubicación:** `tests/test_transformations.py`
+
+**Funciones testeadas:**
+
+1. **`_coerce_amount`**: Conversión de valores a numéricos
+   - Valores numéricos válidos (integers, floats, strings numéricos)
+   - Manejo de valores inválidos (NaN para strings no numéricos, valores nulos)
+   - Casos borde (series vacías, valores con símbolos de moneda)
+
+2. **`_normalize_status`**: Normalización de estados de transacción
+   - Normalización de mayúsculas/minúsculas
+   - Limpieza de espacios en blanco
+   - Mapeo de valores inválidos a None
+
+3. **`clean_daily_transactions`**: Pipeline de limpieza completo
+   - Generación correcta de archivos parquet
+   - Normalización de nombres de columnas
+   - Eliminación de duplicados
+   - Derivación del campo `transaction_date`
+   - Manejo de errores (archivo no encontrado)
+   - Creación automática de directorios
+
+**Ejecución de los tests:**
+
+```bash
+# Desde el directorio raíz del proyecto
+pip install -r requirements.txt
+pytest -v
+
+# Con reporte de cobertura
+pytest --cov=src --cov-report=term-missing
+```
+
+**Estructura de los tests:**
+
+```
+tests/
+├── __init__.py
+├── conftest.py          # Configuración de pytest y fixtures globales
+└── test_transformations.py  # Tests unitarios para transformations.py
+```
+
+#### 3.4.2 Tests Singulares de dbt (Data Quality)
+
+Se implementaron tests singulares de dbt que validan reglas de negocio específicas y la integridad entre capas del pipeline.
+
+**Ubicación:** `dbt/tests/singular/`
+
+| Test | Descripción | Capa validada |
+|------|-------------|---------------|
+| `assert_total_amount_all_gte_completed.sql` | Valida que `total_amount_all >= total_amount_completed` (la suma total no puede ser menor que solo los completados) | Gold |
+| `assert_transaction_count_positive.sql` | Valida que cada cliente tenga al menos una transacción (count >= 1) | Gold |
+| `assert_staging_amounts_match_mart_totals.sql` | Valida consistencia: suma de montos en staging = suma en mart | Silver → Gold |
+| `assert_transaction_date_not_future.sql` | Valida que no existan transacciones con fecha futura | Silver |
+| `assert_customer_count_consistency.sql` | Valida que la cantidad de clientes únicos sea igual entre staging y mart | Silver → Gold |
+
+**Ejecución de los tests de dbt:**
+
+```bash
+cd dbt
+DBT_PROFILES_DIR=../profiles dbt test
+```
+
+#### 3.4.3 Prácticas de Testing
+
+Los tests siguen las prácticas de ingeniería de software:
+
+- **Unit tests con pytest**: Utilizan table-driven tests para cubrir distintos escenarios.
+- **Fixtures**: Se usan fixtures de pytest para crear datos de prueba y directorios temporales.
+- **Aislamiento**: Cada test es independiente y no depende del estado de otros tests.
+- **Tests singulares de dbt**: Validan reglas de negocio que no pueden expresarse solo con tests del schema.yml.
+- **Tests de integridad entre capas**: Verifican que los datos se transformen correctamente de Bronze a Silver a Gold.
+
+### 3.5 Mejoras posibles (escalabilidad y modelado)
+
+#### 3.5.1 Separación de ambientes y modularización
 
 - Separar Airflow y dbt en contenedores independientes.  
 - Ejecutar dbt de forma remota (dbt Cloud, runner dedicado).  
 - Desacoplar el data warehouse.
 
-#### 3.4.2 Migración a data warehouse escalable
+#### 3.5.2 Migración a data warehouse escalable
 
 Opciones:
 
@@ -148,23 +242,23 @@ Opciones:
 
 Permiten particionamiento, clustering y escalado automático.
 
-#### 3.4.3 Particionamiento en Silver y Gold
+#### 3.5.3 Particionamiento en Silver y Gold
 
 - Particionar por `transaction_date`.  
 - Implementar modelos incrementalizados.
 
-#### 3.4.4 Sensores en Bronze
+#### 3.5.4 Sensores en Bronze
 
 - `FileSensor` para esperar la llegada del CSV.  
 - SLA para alertar retrasos.
 
-#### 3.4.5 Validaciones adicionales
+#### 3.5.5 Validaciones adicionales
 
 - Consistencia temporal.  
 - Correlaciones entre campos.  
 - Chequeos estadísticos y duplicados avanzados.
 
-#### 3.4.6 Documentación automática
+#### 3.5.6 Documentación automática
 
 ```
 dbt docs generate
@@ -173,13 +267,13 @@ dbt docs serve
 
 Se podría integrar al DAG.
 
-#### 3.4.7 Monitoreo y trazabilidad
+#### 3.5.7 Monitoreo y trazabilidad
 
 - Métricas con Prometheus/Grafana.  
 - Logging centralizado.  
 - Metadatos de ejecución.
 
-### 3.5 Manejo del caso sin archivos para el día indicado (Nice to Have)
+### 3.6 Manejo del caso sin archivos para el día indicado (Nice to Have)
 
 El requerimiento adicional consistía en manejar correctamente la situación donde no existe un archivo en `data/raw/` para un día determinado.  
 Para resolverlo se implementó una lógica de control en la tarea Bronze que:
@@ -195,13 +289,13 @@ Para resolverlo se implementó una lógica de control en la tarea Bronze que:
 La lógica se encuentra implementada en:
 
 ```
-include/transformations.py  
+src/transformations.py  
 dags/medallion_medallion_dag.py  
 ```
 
 Este mecanismo garantiza un pipeline estable y evita fallos innecesarios cuando no existe input para un día dado, permitiendo además evaluar correctamente la funcionalidad del DAG durante el catchup.
 
-### 3.6 Diagrama del Pipeline Medallion
+### 3.7 Diagrama del Pipeline Medallion
 
 El siguiente diagrama representa el flujo completo de procesamiento entre las capas Bronze, Silver y Gold, junto con la interacción entre Airflow, dbt y DuckDB.
 
